@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.venv/
+venv/
+
+# Test / coverage artifacts
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Claude Code local config (machine-specific permissions)
+.claude/settings.json
+.claude/settings.local.json
+
+# HA dev artifacts (if you ever run a local config dir for testing)
+ha-config/
+.storage/
+home-assistant.log*
+home-assistant_v2.db*
+
+# Staging area for home-assistant/brands submission — copy into a brands
+# checkout and PR from there; not part of this integration.
+brands/

@@ -1,0 +1,5 @@
+# Default owner for everything in this repository.
+# NOTE: if `elninotech` is an organization (not a user), GitHub only resolves
+# code owners that are users or teams — switch this to a team handle such as
+# `@elninotech/maintainers` for review auto-assignment to take effect.
+* @elninotech

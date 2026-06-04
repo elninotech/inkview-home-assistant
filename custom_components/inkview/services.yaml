@@ -1,0 +1,21 @@
+refresh:
+  name: Refresh now
+  description: >
+    Force the energy coordinator to refresh immediately instead of waiting
+    for the next 5-minute tick. Useful after editing the HA Energy
+    dashboard configuration.
+
+rotate_secret:
+  name: Rotate shared secret
+  description: >
+    Generate a brand-new shared secret. The integration starts using it
+    immediately and the new value is delivered via a persistent
+    notification (visible exactly once). The InkView side must be updated
+    to the new value before its next request.
+
+revoke_all_tokens:
+  name: Revoke all bearer tokens
+  description: >
+    Invalidate every outstanding 15-minute bearer token without changing
+    the shared secret. The InkView side can re-authenticate immediately
+    using the same secret. Use this if a leaked token is suspected.

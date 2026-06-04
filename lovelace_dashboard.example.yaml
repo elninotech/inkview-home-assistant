@@ -1,0 +1,99 @@
+# InkView — example Lovelace dashboard.
+#
+# Phase-1 ships this as a YAML you copy into your dashboards setup; phase-2
+# will auto-register it. To install:
+#   1) Settings → Dashboards → Add Dashboard → choose YAML mode → "inkview"
+#   2) Save this file as `inkview.yaml` next to your `configuration.yaml`
+#      and reference it via `lovelace.dashboards.inkview.filename`.
+#
+# Or paste the `views:` block into any existing dashboard via the raw editor.
+#
+# Entity IDs assume the default `inkview` config entry name. If you used a
+# different connection name, find the actual entity_ids under
+# Developer Tools → States and substitute.
+
+title: InkView
+views:
+  - title: Overview
+    path: overview
+    icon: mdi:lightning-bolt
+    cards:
+      - type: markdown
+        content: |
+          ## InkView — energy totals
+          Powered by the InkView integration. These cards reflect Home
+          Assistant's Energy dashboard data, aggregated into daily / weekly
+          / monthly buckets.
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: entity
+            entity: sensor.inkview_daily_consumption
+            name: Daily Consumption
+          - type: entity
+            entity: sensor.inkview_daily_production
+            name: Daily Production
+          - type: entity
+            entity: sensor.inkview_daily_net_grid
+            name: Daily Net Grid
+          - type: entity
+            entity: sensor.inkview_daily_cost
+            name: Daily Cost
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: entity
+            entity: sensor.inkview_weekly_consumption
+            name: Weekly Consumption
+          - type: entity
+            entity: sensor.inkview_weekly_production
+            name: Weekly Production
+          - type: entity
+            entity: sensor.inkview_weekly_net_grid
+            name: Weekly Net Grid
+          - type: entity
+            entity: sensor.inkview_weekly_cost
+            name: Weekly Cost
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: entity
+            entity: sensor.inkview_monthly_consumption
+            name: Monthly Consumption
+          - type: entity
+            entity: sensor.inkview_monthly_production
+            name: Monthly Production
+          - type: entity
+            entity: sensor.inkview_monthly_net_grid
+            name: Monthly Net Grid
+          - type: entity
+            entity: sensor.inkview_monthly_cost
+            name: Monthly Cost
+
+      - type: statistics-graph
+        title: Consumption over the last 30 days
+        days_to_show: 30
+        chart_type: bar
+        stat_types:
+          - change
+        entities:
+          - sensor.inkview_daily_consumption
+          - sensor.inkview_daily_production
+          - sensor.inkview_daily_grid_import
+          - sensor.inkview_daily_grid_export
+
+  - title: Diagnostics
+    path: diagnostics
+    icon: mdi:information-outline
+    cards:
+      - type: markdown
+        content: |
+          ### Connection
+          Settings → Devices & services → **InkView** → ⋮ → *Download diagnostics*
+          for a redacted state dump (safe to share for support).
