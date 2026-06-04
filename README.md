@@ -136,6 +136,7 @@ custom_components/inkview/
   repairs.py             "no energy sensors" repair issue
   panel.py               sidebar panel registration
   ws_api.py              admin-gated inkview/credentials WS command
+  brand/                 icon/logo served locally by HA (2026.3+), 8 PNGs
   auth/
     bearer.py            HS256 JWT + HMAC, stdlib-only
     stats.py             per-session token/auth telemetry
