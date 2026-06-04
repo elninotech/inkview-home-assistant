@@ -1,13 +1,13 @@
 {
   "domain": "inkview",
   "name": "InkView",
-  "version": "0.4.1",
-  "documentation": "https://github.com/elninotech/inkview-home-assistant",
-  "issue_tracker": "https://github.com/elninotech/inkview-home-assistant/issues",
   "codeowners": ["@elninotech"],
   "config_flow": true,
-  "iot_class": "local_polling",
-  "integration_type": "service",
   "dependencies": ["http", "frontend", "websocket_api"],
-  "requirements": []
+  "documentation": "https://github.com/elninotech/inkview-home-assistant",
+  "integration_type": "service",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/elninotech/inkview-home-assistant/issues",
+  "requirements": [],
+  "version": "0.4.1"
 }
