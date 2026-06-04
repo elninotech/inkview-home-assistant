@@ -12,6 +12,7 @@ from homeassistant.components.persistent_notification import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.service import async_register_admin_service
 
 from .const import (
@@ -41,6 +42,10 @@ from .ws_api import async_register_ws
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
+
+# InkView is configured via the UI (config flow) only — it has no YAML config.
+# Declaring this satisfies hassfest and rejects any stray YAML under `inkview:`.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 def _ensure_domain_data(hass: HomeAssistant) -> dict[str, Any]:

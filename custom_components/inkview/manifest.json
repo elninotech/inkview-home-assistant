@@ -3,7 +3,7 @@
   "name": "InkView",
   "codeowners": ["@elninotech"],
   "config_flow": true,
-  "dependencies": ["http", "frontend", "websocket_api"],
+  "dependencies": ["http", "frontend", "websocket_api", "logbook"],
   "documentation": "https://github.com/elninotech/inkview-home-assistant",
   "integration_type": "service",
   "iot_class": "local_polling",
