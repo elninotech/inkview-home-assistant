@@ -16,6 +16,6 @@ rotate_secret:
 revoke_all_tokens:
   name: Revoke all bearer tokens
   description: >
-    Invalidate every outstanding 15-minute bearer token without changing
+    Invalidate every outstanding bearer token without changing
     the shared secret. The InkView side can re-authenticate immediately
     using the same secret. Use this if a leaked token is suspected.

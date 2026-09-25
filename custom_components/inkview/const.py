@@ -1,7 +1,7 @@
 """Constants for the InkView Home Assistant integration."""
 
 DOMAIN = "inkview"
-VERSION = "0.4.1"
+VERSION = "1.0.0"
 
 URL_PREFIX = "/api/inkview/v1"
 
