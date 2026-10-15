@@ -118,6 +118,9 @@ class InkViewAuthTokenView(HomeAssistantView):
                 session["stats"].record_failed_auth()
             return web.json_response({"error": "replay"}, status=401)
 
+        # "All sensors" travels as an explicit flag: an empty allowed_entities
+        # list on its own means "read nothing" (see grant.grant_set).
+        all_sensors = session.get("all_sensors") is True
         allowed_entities: list[str] = list(session.get("allowed_entities") or [])
         key_version = int(session.get("key_version", 1))
         # scope="read" is advisory metadata — the token only ever works
@@ -128,6 +131,7 @@ class InkViewAuthTokenView(HomeAssistantView):
             key_version=key_version,
             ttl_seconds=DEFAULT_TOKEN_TTL_SECONDS,
             extra_claims={
+                "all_sensors": all_sensors,
                 "allowed_entities": allowed_entities,
                 "scope": TOKEN_SCOPE,
             },

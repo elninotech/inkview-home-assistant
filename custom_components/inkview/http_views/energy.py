@@ -2,8 +2,8 @@
 
 GET /api/inkview/v1/energy/totals
 
-Returns the kWh sum of the energy sensors this token is allowed to see
-(empty allowlist == all renderable sensors), plus the per-sensor breakdown.
+Returns the kWh sum of the energy sensors this token is allowed to see,
+plus the per-sensor breakdown.
 Read-only — never mutates HA."""
 from __future__ import annotations
 
@@ -11,8 +11,6 @@ import logging
 
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
-
-from homeassistant.util import dt as dt_util
 
 from ..const import URL_PREFIX
 from ..energy.energy_service import EnergyService
@@ -33,22 +31,13 @@ class InkViewEnergyTotalsView(HomeAssistantView):
         claims, session = result
 
         # None == all renderable sensors; a set (possibly empty) == strict
-        # allowlist. EnergyService treats an empty list as "all", so the
-        # deny-all case (empty set) is short-circuited to a zero total here.
+        # allowlist, where empty sums nothing.
         allowed = effective_allowlist(claims, session)
         hass = request.app["hass"]
         try:
-            if allowed is not None and not allowed:
-                payload = {
-                    "total_energy_kwh": 0.0,
-                    "sensor_count": 0,
-                    "sources": [],
-                    "computed_at": dt_util.utcnow().isoformat(),
-                }
-            else:
-                payload = EnergyService(hass).total(
-                    None if allowed is None else sorted(allowed)
-                )
+            payload = EnergyService(hass).total(
+                None if allowed is None else sorted(allowed)
+            )
         except Exception:  # noqa: BLE001 — never leak internals to the caller
             _LOGGER.exception("energy total failed")
             return web.json_response({"error": "energy_unavailable"}, status=503)

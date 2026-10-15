@@ -16,7 +16,6 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.service import async_register_admin_service
 
 from .const import (
-    CONF_ALLOWED_ENTITIES,
     CONF_INSTANCE_ID,
     CONF_KEY_VERSION,
     CONF_SECRET,
@@ -35,6 +34,7 @@ from .const import (
 )
 from .auth.stats import SessionStats
 from .energy.coordinator import InkViewEnergyCoordinator
+from .grant import entry_grant
 from .http_views import register_views
 from .panel import async_register_panel, async_unregister_panel
 from .ws_api import async_register_ws
@@ -103,25 +103,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     instance_id = entry.data[CONF_INSTANCE_ID]
     secret = bytes.fromhex(entry.data[CONF_SECRET])
-    # Options take precedence over original data for things the user can edit
-    # post-setup (the allowed-entities list).
-    allowed: list[str] = list(
-        entry.options.get(
-            CONF_ALLOWED_ENTITIES,
-            entry.data.get(CONF_ALLOWED_ENTITIES, []),
-        )
-    )
+    # None = all renderable sensors; a list (possibly empty) = only those.
+    grant = entry_grant(entry)
     key_version = int(entry.data.get(CONF_KEY_VERSION, 1))
 
     data[DATA_SESSIONS][instance_id] = {
         "entry_id": entry.entry_id,
         "secret": secret,
-        "allowed_entities": allowed,
+        "all_sensors": grant is None,
+        "allowed_entities": grant or [],
         "key_version": key_version,
         "stats": SessionStats(),
     }
 
-    coordinator = InkViewEnergyCoordinator(hass, allowed)
+    coordinator = InkViewEnergyCoordinator(hass, grant)
     try:
         await coordinator.async_config_entry_first_refresh()
     except Exception as e:  # noqa: BLE001
@@ -159,8 +154,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def _async_update_listener(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> None:
-    """Trigger an entry reload when options change so the new
-    allowed_entities take effect on the next token issuance."""
+    """Trigger an entry reload when options change. The rebuilt session
+    carries the new grant, which narrows already-issued tokens on their next
+    request (see effective_allowlist) and is frozen into new ones."""
     await hass.config_entries.async_reload(entry.entry_id)
 
 

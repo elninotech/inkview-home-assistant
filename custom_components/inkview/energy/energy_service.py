@@ -73,12 +73,12 @@ class EnergyService:
         }
 
     def _candidate_ids(self, allowed: list[str] | None) -> list[str]:
-        """Which sensors to consider. A non-empty allowlist is taken
-        verbatim (de-duped, order preserved). An empty allowlist means
-        'all sensors', so we scan every sensor.* entity. InkView's own
+        """Which sensors to consider. An allowlist is taken verbatim
+        (de-duped, order preserved); an empty one means 'no sensors'. None
+        means 'all sensors', so we scan every sensor.* entity. InkView's own
         entities are always dropped so the total can't feed back into itself."""
         own = self._own_entity_ids()
-        if allowed:
+        if allowed is not None:
             ids = list(dict.fromkeys(allowed))
         else:
             ids = [s.entity_id for s in self.hass.states.async_all("sensor")]

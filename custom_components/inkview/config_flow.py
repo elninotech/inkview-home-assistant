@@ -28,6 +28,7 @@ from .const import (
     CONF_SHOW_SIDEBAR_PANEL,
     DOMAIN,
 )
+from .grant import entry_grant
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,8 +45,9 @@ def _parse_secret(raw: str | None) -> bytes:
 
 def _resolve_allowed(user_input: dict[str, Any]) -> list[str]:
     """Map the 'Expose all sensors' toggle + the picker into the stored
-    allowlist. Toggle ON (the 'all') -> empty list == every renderable
-    sensor. Toggle OFF -> exactly the picked sensors (possibly none)."""
+    allowlist. Toggle ON -> empty list (the CONF_ALL_SENSORS flag stored
+    beside it is what grants every sensor). Toggle OFF -> exactly the picked
+    sensors; none picked means InkView can read nothing."""
     if user_input.get(CONF_ALL_SENSORS, True):
         return []
     return list(user_input.get(CONF_ALLOWED_ENTITIES) or [])
@@ -197,14 +199,9 @@ class InkViewOptionsFlow(OptionsFlow):
                 self._entry.data.get(CONF_ALLOWED_ENTITIES, []),
             )
         )
-        # An empty allowlist means "all sensors". Default the toggle to match
-        # whatever's currently stored so re-opening options is non-destructive.
-        current_all = bool(
-            self._entry.options.get(
-                CONF_ALL_SENSORS,
-                self._entry.data.get(CONF_ALL_SENSORS, not current_entities),
-            )
-        )
+        # Default the toggle to the grant actually in force so re-opening
+        # options is non-destructive.
+        current_all = entry_grant(self._entry) is None
         current_panel = bool(
             self._entry.options.get(
                 CONF_SHOW_SIDEBAR_PANEL,

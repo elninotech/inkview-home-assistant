@@ -14,7 +14,7 @@
         "data_description": {
           "secret": "Generate one with `openssl rand -hex 32`. Both ends need the same value.",
           "all_sensors": "On = InkView can read every numeric sensor (the 'all' option). Turn off to restrict it to a hand-picked list below.",
-          "allowed_entities": "Only used when 'Expose all sensors' is off. These are the only sensors InkView can read, and the energy ones among them feed the total-energy figure.",
+          "allowed_entities": "Only used when 'Expose all sensors' is off. These are the only sensors InkView can read, and the energy ones among them feed the total-energy figure. If none are picked, InkView can read nothing.",
           "show_sidebar_panel": "Adds an InkView entry to Home Assistant's left sidebar with the total-energy view."
         }
       },
@@ -46,7 +46,7 @@
         },
         "data_description": {
           "all_sensors": "On = every numeric sensor is readable (the 'all' option). Turn off to restrict to the list below.",
-          "allowed_entities": "Only used when 'Expose all sensors' is off."
+          "allowed_entities": "Only used when 'Expose all sensors' is off. If none are picked, InkView can read nothing."
         }
       }
     }

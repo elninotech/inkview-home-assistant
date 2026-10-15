@@ -32,7 +32,10 @@ class InkViewEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(minutes=ENERGY_UPDATE_INTERVAL_MINUTES),
         )
         self._service = EnergyService(hass)
-        self._allowed = list(allowed_entities or [])
+        # None = all sensors; a list (possibly empty) = only those.
+        self._allowed = (
+            None if allowed_entities is None else list(allowed_entities)
+        )
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:

@@ -30,6 +30,7 @@ async def async_get_config_entry_diagnostics(
         session_dumps.append(
             {
                 "instance_id": iid,
+                "all_sensors": s.get("all_sensors") is True,
                 "allowed_entities_count": len(s.get("allowed_entities") or []),
                 "key_version": s.get("key_version", 1),
                 "stats": stats.snapshot() if stats is not None else None,

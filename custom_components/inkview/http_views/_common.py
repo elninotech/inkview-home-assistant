@@ -8,6 +8,7 @@ from aiohttp import web
 
 from ..auth.bearer import InvalidToken, parse_unverified_subject, verify
 from ..const import DATA_SESSIONS, DOMAIN
+from ..grant import grant_set
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -68,29 +69,23 @@ def authenticate_bearer(
     return claims, session
 
 
-def _as_allowset(value: Any) -> set[str] | None:
-    """Normalise an allowlist: a non-empty collection becomes a set; an empty
-    or missing one becomes None, the sentinel for 'all renderable sensors'."""
-    s = {str(v) for v in (value or [])}
-    return s or None
-
-
 def effective_allowlist(
     claims: dict[str, Any], session: dict[str, Any]
 ) -> set[str] | None:
     """Entity ids a request may read — or None for 'all renderable sensors'.
 
-    A token freezes the allowlist captured when it was minted, but bearers
-    live up to a year. To honour scope changes immediately we combine the
-    token's grant with the session's *current* allowlist and return the more
-    restrictive of the two: tightening the allowlist in options takes effect
-    at once, and a token is never broadened beyond what it was issued for.
+    A token freezes the grant captured when it was minted, but bearers live
+    up to a year. To honour scope changes immediately we combine the token's
+    grant with the session's *current* grant and return the more restrictive
+    of the two: tightening the allowlist in options takes effect at once, and
+    a token is never broadened beyond what it was issued for.
 
-    An empty set is returned (not None) when the two grants don't overlap —
-    that means 'read nothing', which callers must treat as deny-all, distinct
-    from the None 'read everything' sentinel."""
-    token_allowed = _as_allowset(claims.get("allowed_entities"))
-    session_allowed = _as_allowset(session.get("allowed_entities"))
+    An empty set means 'read nothing' and callers must treat it as deny-all,
+    distinct from the None 'read everything' sentinel. It's returned for a
+    restricted grant with no sensors picked, and when the two grants don't
+    overlap. Only an explicit all_sensors flag yields None (see grant_set)."""
+    token_allowed = grant_set(claims)
+    session_allowed = grant_set(session)
     if token_allowed is None:
         return session_allowed
     if session_allowed is None:

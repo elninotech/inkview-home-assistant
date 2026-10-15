@@ -16,7 +16,7 @@ async def test_sums_and_normalises_units(hass: HomeAssistant) -> None:
     hass.states.async_set("sensor.text", "abc", {"unit_of_measurement": "kWh"})  # non-numeric
     hass.states.async_set("sensor.nounit", "5", {})                              # no unit
 
-    result = EnergyService(hass).total([])  # empty allowlist == all renderable
+    result = EnergyService(hass).total(None)  # None == all renderable
 
     assert result["total_energy_kwh"] == pytest.approx(2101.0)
     assert result["sensor_count"] == 3
@@ -31,7 +31,7 @@ async def test_excludes_own_total_entity(hass: HomeAssistant) -> None:
     hass.states.async_set("sensor.house", "100", {"unit_of_measurement": "kWh"})
     hass.states.async_set(entry.entity_id, "999999", {"unit_of_measurement": "kWh"})
 
-    result = EnergyService(hass).total([])
+    result = EnergyService(hass).total(None)
 
     # The InkView total must not count itself, or it runs away exponentially.
     assert result["total_energy_kwh"] == pytest.approx(100.0)
@@ -47,6 +47,16 @@ async def test_explicit_allowlist_restricts(hass: HomeAssistant) -> None:
 
     assert result["total_energy_kwh"] == pytest.approx(10.0)
     assert result["sensor_count"] == 1
+
+
+async def test_empty_allowlist_sums_nothing(hass: HomeAssistant) -> None:
+    # An empty list is a restricted grant with nothing picked, not "all".
+    hass.states.async_set("sensor.a", "10", {"unit_of_measurement": "kWh"})
+
+    result = EnergyService(hass).total([])
+
+    assert result["sensor_count"] == 0
+    assert result["total_energy_kwh"] == pytest.approx(0.0)
 
 
 async def test_own_entity_excluded_even_if_explicitly_allowed(hass: HomeAssistant) -> None:

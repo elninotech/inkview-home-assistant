@@ -1,51 +1,129 @@
-"""Tests for effective_allowlist — the per-request authorization boundary.
+"""Tests for the sensor grant and effective_allowlist — the per-request
+authorization boundary.
 
-None means "all renderable sensors"; a set (possibly empty) is a strict
-allowlist, where the empty set means "deny everything". The function returns
-the more restrictive of the token's frozen grant and the session's current
-allowlist, so tightening scope in options applies to already-issued tokens.
+None means "all renderable sensors" and is only ever produced by an explicit
+`all_sensors: true`. A set (possibly empty) is a strict allowlist, where the
+empty set means "deny everything". effective_allowlist returns the more
+restrictive of the token's frozen grant and the session's current one, so
+tightening scope in options applies to already-issued tokens.
 """
-from custom_components.inkview.http_views._common import (
-    _as_allowset,
-    effective_allowlist,
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.inkview.const import (
+    CONF_ALL_SENSORS,
+    CONF_ALLOWED_ENTITIES,
+    DOMAIN,
 )
+from custom_components.inkview.grant import entry_grant, grant_set
+from custom_components.inkview.http_views._common import effective_allowlist
+
+ALL = {"all_sensors": True, "allowed_entities": []}
 
 
-def test_as_allowset_normalisation():
-    assert _as_allowset(None) is None
-    assert _as_allowset([]) is None              # empty == "all"
-    assert _as_allowset(["sensor.a"]) == {"sensor.a"}
+def _only(*ids: str) -> dict:
+    return {"all_sensors": False, "allowed_entities": list(ids)}
+
+
+# --- entry_grant -----------------------------------------------------------
+
+
+def test_entry_all_sensors_is_none():
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_ALL_SENSORS: True, CONF_ALLOWED_ENTITIES: []},
+    )
+    assert entry_grant(entry) is None
+
+
+def test_entry_restricted_with_nothing_picked_is_empty_not_all():
+    # ELN-380: toggle off + no sensors picked must read nothing.
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_ALL_SENSORS: False, CONF_ALLOWED_ENTITIES: []},
+    )
+    assert entry_grant(entry) == []
+
+
+def test_entry_restricted_list():
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_ALL_SENSORS: False, CONF_ALLOWED_ENTITIES: ["sensor.a"]},
+    )
+    assert entry_grant(entry) == ["sensor.a"]
+
+
+def test_entry_options_override_data():
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_ALL_SENSORS: True, CONF_ALLOWED_ENTITIES: []},
+        options={CONF_ALL_SENSORS: False, CONF_ALLOWED_ENTITIES: []},
+    )
+    assert entry_grant(entry) == []
+
+
+def test_entry_without_toggle_keeps_legacy_meaning():
+    legacy_all = MockConfigEntry(domain=DOMAIN, data={CONF_ALLOWED_ENTITIES: []})
+    legacy_list = MockConfigEntry(
+        domain=DOMAIN, data={CONF_ALLOWED_ENTITIES: ["sensor.a"]}
+    )
+    assert entry_grant(legacy_all) is None
+    assert entry_grant(legacy_list) == ["sensor.a"]
+
+
+# --- grant_set -------------------------------------------------------------
+
+
+def test_grant_set_normalisation():
+    assert grant_set(ALL) is None
+    assert grant_set(_only()) == set()
+    assert grant_set(_only("sensor.a")) == {"sensor.a"}
+
+
+def test_grant_set_fails_closed_without_explicit_flag():
+    # Pre-fix bearers carried a bare list; an empty one must not mean "all".
+    assert grant_set({"allowed_entities": []}) == set()
+    assert grant_set({}) == set()
+    assert grant_set({"all_sensors": "true"}) == set()  # only literal True
+
+
+# --- effective_allowlist ---------------------------------------------------
 
 
 def test_both_all_returns_none():
-    assert effective_allowlist({}, {}) is None
-    assert effective_allowlist(
-        {"allowed_entities": []}, {"allowed_entities": []}
-    ) is None
+    assert effective_allowlist(ALL, ALL) is None
+
+
+def test_restricted_empty_session_denies_an_all_token():
+    out = effective_allowlist(ALL, _only())
+    assert out == set()
+    assert out is not None
+
+
+def test_restricted_empty_token_denies_an_all_session():
+    assert effective_allowlist(_only(), ALL) == set()
+
+
+def test_legacy_empty_token_denies_even_when_session_is_all():
+    assert effective_allowlist({"allowed_entities": []}, ALL) == set()
 
 
 def test_session_narrows_an_all_token():
-    out = effective_allowlist({}, {"allowed_entities": ["sensor.a", "sensor.b"]})
+    out = effective_allowlist(ALL, _only("sensor.a", "sensor.b"))
     assert out == {"sensor.a", "sensor.b"}
 
 
 def test_token_constrains_when_session_is_all():
-    out = effective_allowlist({"allowed_entities": ["sensor.a"]}, {})
-    assert out == {"sensor.a"}
+    assert effective_allowlist(_only("sensor.a"), ALL) == {"sensor.a"}
 
 
 def test_intersection_is_more_restrictive():
     out = effective_allowlist(
-        {"allowed_entities": ["sensor.a", "sensor.b"]},
-        {"allowed_entities": ["sensor.b", "sensor.c"]},
+        _only("sensor.a", "sensor.b"), _only("sensor.b", "sensor.c")
     )
     assert out == {"sensor.b"}
 
 
 def test_disjoint_grants_deny_all_not_all():
-    out = effective_allowlist(
-        {"allowed_entities": ["sensor.a"]},
-        {"allowed_entities": ["sensor.b"]},
-    )
+    out = effective_allowlist(_only("sensor.a"), _only("sensor.b"))
     assert out == set()
     assert out is not None  # empty set = deny everything, NOT "all sensors"
