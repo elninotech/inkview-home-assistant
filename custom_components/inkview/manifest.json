@@ -1,6 +1,7 @@
 {
   "domain": "inkview",
   "name": "InkView",
+  "after_dependencies": ["energy", "recorder"],
   "codeowners": ["@elninotech"],
   "config_flow": true,
   "dependencies": ["http", "frontend", "websocket_api", "logbook"],
@@ -9,5 +10,5 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/elninotech/inkview-home-assistant/issues",
   "requirements": [],
-  "version": "1.0.0"
+  "version": "1.1.0"
 }

@@ -1,12 +1,6 @@
-"""Unauthenticated reachability check.
+"""GET /api/inkview/v1/health → {ok, energy_ready}. Unauthenticated.
 
-GET /api/inkview/v1/health → { ok, version, energy_ready }
-
-Deliberately reveals only what InkView already learns from finding any
-authenticated endpoint at this base URL: this host runs the integration.
-The integration version is intentionally NOT exposed here — version strings
-on an unauthenticated endpoint just hand a scanner a way to fingerprint a
-vulnerable build. Authenticated callers get it from the manifest."""
+Deliberately omits the version so scanners can't fingerprint vulnerable builds."""
 from __future__ import annotations
 
 import logging
@@ -26,9 +20,6 @@ class InkViewHealthView(HomeAssistantView):
 
     async def get(self, request: web.Request) -> web.Response:
         hass = request.app["hass"]
-        # "energy_ready" now means: at least one configured session is
-        # summing one or more energy sensors into a total. No Energy-dashboard
-        # dependency.
         coordinators = hass.data.get(DOMAIN, {}).get(DATA_COORDINATORS, {})
         energy_ready = any(
             (c.data or {}).get("sensor_count", 0) > 0

@@ -1,8 +1,6 @@
-"""Client-credentials token endpoint.
+"""POST /api/inkview/v1/auth/token — exchanges an HMAC-signed request for a bearer.
 
-Why HMAC rather than a bearer here: this endpoint *issues* bearers, so it
-can't require one of its own. HMAC over (instance_id, ts, nonce) gives us
-replay protection without ever putting the shared secret on the wire."""
+HMAC over (instance_id, ts, nonce) keeps the secret off the wire; nonces block replay."""
 from __future__ import annotations
 
 import json
@@ -18,6 +16,7 @@ from homeassistant.components.logbook import async_log_entry
 
 from ..auth.bearer import mint, verify_hmac
 from ..const import (
+    CONF_LINK_EXPIRES_AT,
     DATA_NONCE_CACHES,
     DATA_SESSIONS,
     DEFAULT_TOKEN_TTL_SECONDS,
@@ -29,14 +28,13 @@ from ..const import (
     TOKEN_SCOPE,
     URL_PREFIX,
 )
+from ..link import link_expired
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def _register_nonce(cache: "OrderedDict[str, float]", nonce: str) -> bool:
-    """Return True if the nonce is fresh; False if a replay. Side effect:
-    evicts expired and over-cap entries on every call (O(k) where k is the
-    number of expired entries — amortised O(1))."""
+    """True if fresh, False on replay. Also evicts expired and over-cap entries."""
     now = time.monotonic()
     while cache:
         _oldest, expires_at = next(iter(cache.items()))
@@ -53,11 +51,9 @@ def _register_nonce(cache: "OrderedDict[str, float]", nonce: str) -> bool:
 
 
 class InkViewAuthTokenView(HomeAssistantView):
-    """POST /api/inkview/v1/auth/token"""
-
     url = f"{URL_PREFIX}/auth/token"
     name = "api:inkview:auth-token"
-    requires_auth = False  # uses HMAC; see module docstring
+    requires_auth = False  # HMAC-authenticated
 
     async def post(self, request: web.Request) -> web.Response:
         hass = request.app["hass"]
@@ -66,7 +62,6 @@ class InkViewAuthTokenView(HomeAssistantView):
             DOMAIN, {}
         ).setdefault(DATA_NONCE_CACHES, {})
 
-        # Read with a hard upper bound to defend against accidental DoS.
         body = await request.content.read(MAX_AUTH_BODY_BYTES + 1)
         if len(body) > MAX_AUTH_BODY_BYTES:
             return web.json_response({"error": "payload_too_large"}, status=413)
@@ -85,6 +80,9 @@ class InkViewAuthTokenView(HomeAssistantView):
 
         if not all(isinstance(x, str) for x in (instance_id, ts, nonce, sig)):
             return web.json_response({"error": "bad_request"}, status=400)
+        # Non-ASCII would make verify_hmac's encode raise (500).
+        if not (ts.isascii() and nonce.isascii() and instance_id.isascii()):
+            return web.json_response({"error": "bad_request"}, status=400)
         if not (8 <= len(nonce) <= 64):
             return web.json_response({"error": "bad_nonce"}, status=400)
         if len(sig) != 64:
@@ -99,13 +97,12 @@ class InkViewAuthTokenView(HomeAssistantView):
 
         session = sessions.get(instance_id)
         if session is None:
-            # 401 not 404: don't leak which instance_ids exist.
+            # 401, not 404: don't reveal which instance_ids exist.
             _LOGGER.debug("auth: unknown instance_id")
             return web.json_response({"error": "unauthorized"}, status=401)
 
         secret: bytes = session["secret"]
-        # Canonical signed payload is just the instance_id bytes. Keeps the
-        # signing contract independent of JSON ordering / whitespace.
+        # Signed payload is the instance_id bytes, independent of JSON formatting.
         if not verify_hmac(secret, instance_id.encode("ascii"), ts, nonce, sig):
             if "stats" in session:
                 session["stats"].record_failed_auth()
@@ -118,18 +115,27 @@ class InkViewAuthTokenView(HomeAssistantView):
                 session["stats"].record_failed_auth()
             return web.json_response({"error": "replay"}, status=401)
 
-        # "All sensors" travels as an explicit flag: an empty allowed_entities
-        # list on its own means "read nothing" (see grant.grant_set).
+        # After the signature check, so only secret holders learn the link expired.
+        if link_expired(session):
+            return web.json_response({"error": "link_expired"}, status=401)
+
+        # Empty allowed_entities means "read nothing"; only all_sensors grants all.
         all_sensors = session.get("all_sensors") is True
         allowed_entities: list[str] = list(session.get("allowed_entities") or [])
         key_version = int(session.get("key_version", 1))
-        # scope="read" is advisory metadata — the token only ever works
-        # against InkView's read-only endpoints, which never mutate HA.
+        # TTL capped at link expiry.
+        ttl = max(
+            1,
+            min(
+                DEFAULT_TOKEN_TTL_SECONDS,
+                int(session[CONF_LINK_EXPIRES_AT] - time.time()),
+            ),
+        )
         token, exp = mint(
             secret,
             sub=instance_id,
             key_version=key_version,
-            ttl_seconds=DEFAULT_TOKEN_TTL_SECONDS,
+            ttl_seconds=ttl,
             extra_claims={
                 "all_sensors": all_sensors,
                 "allowed_entities": allowed_entities,
@@ -141,7 +147,7 @@ class InkViewAuthTokenView(HomeAssistantView):
         async_log_entry(
             hass,
             "InkView",
-            "Issued a read-only bearer token (valid 1 year)",
+            "Issued a read-only bearer token",
             DOMAIN,
         )
         return web.json_response(
@@ -150,6 +156,6 @@ class InkViewAuthTokenView(HomeAssistantView):
                 "token_type": "Bearer",
                 "scope": TOKEN_SCOPE,
                 "expires_at": exp,
-                "expires_in": DEFAULT_TOKEN_TTL_SECONDS,
+                "expires_in": ttl,
             }
         )

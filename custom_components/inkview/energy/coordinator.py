@@ -1,8 +1,4 @@
-"""DataUpdateCoordinator powering the in-HA total-energy sensor.
-
-Recomputes the sum of the chosen energy sensors once every few minutes and
-surfaces failures as UpdateFailed so HA's UI shows the integration as
-degraded without crashing."""
+"""Coordinator for the total-energy sensor."""
 from __future__ import annotations
 
 import logging
@@ -20,7 +16,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class InkViewEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """One coordinator per config entry; sums that entry's chosen sensors."""
+    """One per config entry."""
 
     def __init__(
         self, hass: HomeAssistant, allowed_entities: list[str] | None
@@ -32,7 +28,7 @@ class InkViewEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(minutes=ENERGY_UPDATE_INTERVAL_MINUTES),
         )
         self._service = EnergyService(hass)
-        # None = all sensors; a list (possibly empty) = only those.
+        # None = all sensors; an empty list = none.
         self._allowed = (
             None if allowed_entities is None else list(allowed_entities)
         )
@@ -42,6 +38,5 @@ class InkViewEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             data = self._service.total(self._allowed)
         except Exception as e:
             raise UpdateFailed(f"energy sum failed: {e}") from e
-        # Nudge the user via Repairs if nothing summable was found.
         report_energy_state(self.hass, data.get("sensor_count", 0) > 0)
         return data

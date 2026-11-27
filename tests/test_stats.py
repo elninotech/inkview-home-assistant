@@ -25,11 +25,11 @@ def test_evicts_entries_older_than_24h():
     s._tokens.append(stale)
     s._failures.append(stale)
 
-    s.record_token_issued()  # one fresh token; also triggers eviction
+    s.record_token_issued()  # also triggers eviction
 
     snap = s.snapshot()
-    assert snap["tokens_issued_24h"] == 1  # stale token evicted, fresh kept
-    assert snap["failed_auth_24h"] == 0    # stale failure evicted
+    assert snap["tokens_issued_24h"] == 1
+    assert snap["failed_auth_24h"] == 0
 
 
 def test_empty_snapshot():

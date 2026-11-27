@@ -1,11 +1,7 @@
-"""Bulk states endpoint — one round-trip for many entities.
+"""POST /api/inkview/v1/states/batch  {"entity_ids": [...]}
+→ {"states": {"sensor.a": {state, unit, ...}, "sensor.b": {error: ...}}}
 
-POST /api/inkview/v1/states/batch
-Body: {"entity_ids": ["sensor.a", "sensor.b", ...]}
-Resp: {"states": {"sensor.a": {state, unit, ...}, "sensor.b": {error: ...}, ...}}
-
-Per-entity errors are inlined into the response so the caller gets a
-useful answer for as many ids as possible from a single call."""
+Per-entity errors are inlined."""
 from __future__ import annotations
 
 import json
@@ -51,7 +47,6 @@ class InkViewBatchStateView(HomeAssistantView):
         if not all(isinstance(x, str) and "." in x for x in ids):
             return web.json_response({"error": "bad_entity_ids"}, status=400)
 
-        # None = all renderable sensors; a set (possibly empty) = strict list.
         allowed = effective_allowlist(claims, session)
         hass = request.app["hass"]
         out: dict[str, dict[str, Any]] = {}

@@ -1,10 +1,4 @@
-"""End-to-end grant enforcement through the real HTTP views.
-
-Mints a bearer via the client-credentials view, then reads through every
-bearer endpoint, so the grant is exercised from config entry -> session ->
-token claims -> per-request allowlist. Views are called directly with a
-minimal request stand-in (they only touch .app, .headers and .content).
-"""
+"""Grant enforcement end-to-end through the HTTP views, using a stub request."""
 import json
 import secrets
 import time
@@ -13,15 +7,17 @@ import pytest
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.inkview import build_session
 from custom_components.inkview.auth import bearer
-from custom_components.inkview.auth.stats import SessionStats
 from custom_components.inkview.const import (
     CONF_ALL_SENSORS,
     CONF_ALLOWED_ENTITIES,
+    CONF_INSTANCE_ID,
+    CONF_LINK_EXPIRES_AT,
+    CONF_SECRET,
     DATA_SESSIONS,
     DOMAIN,
 )
-from custom_components.inkview.grant import entry_grant
 from custom_components.inkview.http_views.auth import InkViewAuthTokenView
 from custom_components.inkview.http_views.energy import InkViewEnergyTotalsView
 from custom_components.inkview.http_views.states import InkViewStateView
@@ -51,36 +47,44 @@ def _json(resp) -> dict:
     return json.loads(resp.body)
 
 
+_METER = {"unit_of_measurement": "kWh", "state_class": "total_increasing"}
+
+
 def _seed_states(hass: HomeAssistant) -> None:
-    hass.states.async_set("sensor.a", "10", {"unit_of_measurement": "kWh"})
-    hass.states.async_set("sensor.b", "20", {"unit_of_measurement": "kWh"})
+    hass.states.async_set("sensor.a", "10", _METER)
+    hass.states.async_set("sensor.b", "20", _METER)
 
 
-def _install_session(hass: HomeAssistant, *, all_sensors, allowed) -> None:
-    """Build the session exactly as async_setup_entry does."""
+def _install_session(
+    hass: HomeAssistant, *, all_sensors, allowed, link_expires_at=None
+) -> None:
     entry = MockConfigEntry(
         domain=DOMAIN,
-        data={CONF_ALL_SENSORS: all_sensors, CONF_ALLOWED_ENTITIES: allowed},
+        data={
+            CONF_INSTANCE_ID: INSTANCE_ID,
+            CONF_SECRET: SECRET.hex(),
+            CONF_ALL_SENSORS: all_sensors,
+            CONF_ALLOWED_ENTITIES: allowed,
+            CONF_LINK_EXPIRES_AT: link_expires_at or time.time() + 3600,
+        },
     )
-    grant = entry_grant(entry)
-    hass.data.setdefault(DOMAIN, {}).setdefault(DATA_SESSIONS, {})[INSTANCE_ID] = {
-        "entry_id": entry.entry_id,
-        "secret": SECRET,
-        "all_sensors": grant is None,
-        "allowed_entities": grant or [],
-        "key_version": 1,
-        "stats": SessionStats(),
-    }
+    hass.data.setdefault(DOMAIN, {}).setdefault(DATA_SESSIONS, {})[
+        INSTANCE_ID
+    ] = build_session(entry)
 
 
-async def _mint(hass: HomeAssistant) -> str:
+async def _mint_response(hass: HomeAssistant):
     ts = str(int(time.time()))
     nonce = secrets.token_urlsafe(12)
     sig = bearer.sign_hmac(SECRET, INSTANCE_ID.encode("ascii"), ts, nonce)
     body = json.dumps(
         {"instance_id": INSTANCE_ID, "ts": ts, "nonce": nonce, "sig": sig}
     ).encode()
-    resp = await InkViewAuthTokenView().post(_Request(hass, body=body))
+    return await InkViewAuthTokenView().post(_Request(hass, body=body))
+
+
+async def _mint(hass: HomeAssistant) -> str:
+    resp = await _mint_response(hass)
     assert resp.status == 200, resp.body
     return _json(resp)["access_token"]
 
@@ -107,7 +111,6 @@ async def _energy(hass, token) -> dict:
 async def test_restricted_grant_with_no_sensors_exposes_nothing(
     hass: HomeAssistant,
 ) -> None:
-    """ELN-380: 'Expose all sensors' off + nothing picked must read nothing."""
     _seed_states(hass)
     _install_session(hass, all_sensors=False, allowed=[])
     token = await _mint(hass)
@@ -166,8 +169,6 @@ async def test_restricted_grant_exposes_only_picked_sensors(
 async def test_narrowing_to_nothing_revokes_an_all_token(
     hass: HomeAssistant,
 ) -> None:
-    """A token minted under 'all' stops reading the moment the grant is
-    narrowed to nothing — the session's current grant always applies."""
     _seed_states(hass)
     _install_session(hass, all_sensors=True, allowed=[])
     token = await _mint(hass)
@@ -179,10 +180,9 @@ async def test_narrowing_to_nothing_revokes_an_all_token(
 async def test_pre_fix_token_with_empty_list_fails_closed(
     hass: HomeAssistant,
 ) -> None:
-    """Bearers minted before the explicit flag carry a bare `[]`; that must
-    not be read as 'all', even if the session currently grants everything."""
     _seed_states(hass)
     _install_session(hass, all_sensors=True, allowed=[])
+    # Legacy bearer: no all_sensors claim, just a bare [].
     legacy, _ = bearer.mint(
         SECRET,
         sub=INSTANCE_ID,
@@ -190,3 +190,48 @@ async def test_pre_fix_token_with_empty_list_fails_closed(
         extra_claims={"allowed_entities": [], "scope": "read"},
     )
     assert await _list(hass, legacy) == []
+
+
+async def test_expired_link_refuses_to_mint(hass: HomeAssistant) -> None:
+    _install_session(
+        hass, all_sensors=True, allowed=[], link_expires_at=time.time() - 1
+    )
+    resp = await _mint_response(hass)
+    assert resp.status == 401
+    assert _json(resp) == {"error": "link_expired"}
+
+
+async def test_bearer_never_outlives_the_link(hass: HomeAssistant) -> None:
+    expires_at = time.time() + 600
+    _install_session(hass, all_sensors=True, allowed=[], link_expires_at=expires_at)
+    resp = await _mint_response(hass)
+    body = _json(resp)
+    assert body["expires_in"] <= 600
+    assert body["expires_at"] <= expires_at + 1
+
+
+async def test_bearer_stops_working_once_the_link_expires(
+    hass: HomeAssistant,
+) -> None:
+    _seed_states(hass)
+    _install_session(hass, all_sensors=True, allowed=[])
+    token = await _mint(hass)
+    hass.data[DOMAIN][DATA_SESSIONS][INSTANCE_ID][CONF_LINK_EXPIRES_AT] = (
+        time.time() - 1
+    )
+    resp = await InkViewStatesListView().get(_Request(hass, token=token))
+    assert resp.status == 401
+
+
+async def test_non_ascii_nonce_is_a_400_not_a_crash(hass: HomeAssistant) -> None:
+    _install_session(hass, all_sensors=True, allowed=[])
+    body = json.dumps(
+        {
+            "instance_id": INSTANCE_ID,
+            "ts": str(int(time.time())),
+            "nonce": "nonce-\u00e9\u00e9\u00e9",
+            "sig": "0" * 64,
+        }
+    ).encode()
+    resp = await InkViewAuthTokenView().post(_Request(hass, body=body))
+    assert resp.status == 400

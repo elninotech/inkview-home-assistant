@@ -1,7 +1,4 @@
-"""Per-session activity tracking for the binary_sensor + diagnostics.
-
-Lives in `hass.data[DOMAIN][DATA_SESSIONS][instance_id]['stats']`. All methods
-are sync — these are hot-path mutations from request handlers."""
+"""Per-session auth activity (24h window) for the binary_sensor and diagnostics."""
 from __future__ import annotations
 
 import time

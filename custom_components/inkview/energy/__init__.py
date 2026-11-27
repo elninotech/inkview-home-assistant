@@ -1,1 +1,1 @@
-"""Energy total derivation: live state-machine sum, its coordinator, and helpers."""
+"""Energy totals and per-period summaries."""

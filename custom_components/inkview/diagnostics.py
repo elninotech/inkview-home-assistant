@@ -1,4 +1,4 @@
-"""Redacted diagnostics dump (Settings → Devices → Download diagnostics)."""
+"""Redacted config entry diagnostics."""
 from __future__ import annotations
 
 from typing import Any
@@ -8,6 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import (
+    CONF_LINK_EXPIRES_AT,
     CONF_SECRET,
     DATA_COORDINATORS,
     DATA_SESSIONS,
@@ -33,6 +34,7 @@ async def async_get_config_entry_diagnostics(
                 "all_sensors": s.get("all_sensors") is True,
                 "allowed_entities_count": len(s.get("allowed_entities") or []),
                 "key_version": s.get("key_version", 1),
+                "link_expires_at": s.get(CONF_LINK_EXPIRES_AT),
                 "stats": stats.snapshot() if stats is not None else None,
             }
         )

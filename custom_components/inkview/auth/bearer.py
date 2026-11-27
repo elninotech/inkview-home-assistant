@@ -1,8 +1,4 @@
-"""HS256 JWT mint/verify and HMAC request signing.
-
-Implemented in stdlib only so the integration carries zero third-party
-runtime dependencies. HA already ships `cryptography`, but for HMAC-SHA256
-the `hmac` + `hashlib` stdlib modules are sufficient and lighter."""
+"""HS256 JWT mint/verify and HMAC request signing (stdlib only, no extra deps)."""
 from __future__ import annotations
 
 import base64
@@ -15,7 +11,7 @@ from typing import Any
 
 
 class InvalidToken(Exception):
-    """Raised when a presented token is malformed, tampered, or expired."""
+    pass
 
 
 def _b64url(data: bytes) -> str:
@@ -37,12 +33,9 @@ def mint(
     ttl_seconds: int = 900,
     extra_claims: dict[str, Any] | None = None,
 ) -> tuple[str, int]:
-    """Sign a JWT and return (token, exp_unix). Reserved claims always win
-    over `extra_claims` so callers can't forge issuer/audience/expiry.
+    """Return (token, exp_unix). Reserved claims override `extra_claims`.
 
-    `key_version` is embedded as `kv`. Bumping the session's key_version
-    invalidates every previously-issued token without rotating the
-    underlying HMAC secret — that's how `inkview.revoke_all_tokens` works."""
+    `kv` carries key_version; bumping it revokes all tokens without rotating the secret."""
     now = int(time.time())
     exp = now + ttl_seconds
     claims: dict[str, Any] = {}
@@ -77,7 +70,6 @@ def verify(
     iss: str = "inkview-ha",
     leeway_seconds: int = 5,
 ) -> dict[str, Any]:
-    """Constant-time signature check + claim validation."""
     if not isinstance(token, str) or token.count(".") != 2:
         raise InvalidToken("malformed")
     h, p, s = token.split(".")
@@ -111,8 +103,7 @@ def verify(
 
 
 def parse_unverified_subject(token: str) -> str | None:
-    """Peek at the `sub` claim without verifying the signature.
-    Used only to look up which session's secret to verify with."""
+    """Unverified `sub` peek, used only to pick which session secret to verify with."""
     if not isinstance(token, str) or token.count(".") != 2:
         return None
     _, p, _ = token.split(".")

@@ -1,12 +1,6 @@
-"""Total-energy figure derived from the user's chosen sensors.
+"""Live kWh sum of the chosen energy meters (Wh/kWh/MWh, total/total_increasing).
 
-InkView reads individual sensor states directly through the read-only REST
-namespace. This service adds exactly one derived value: the live sum of the
-selected energy sensors — anything reporting Wh / kWh / MWh — normalised to
-kWh. No recorder statistics, no Energy-dashboard coupling, and no simulated
-data: it's purely a sum of what the user picked, computed from the current
-state machine.
-"""
+Forecasts and other energy sensors without a meter state class are skipped."""
 from __future__ import annotations
 
 import logging
@@ -22,7 +16,9 @@ from ..const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-# Energy units that count toward the total, and their multiplier to kWh.
+_METER_STATE_CLASSES = {"total", "total_increasing"}
+
+# Multiplier to kWh.
 _ENERGY_UNIT_TO_KWH: dict[str, float] = {
     UnitOfEnergy.WATT_HOUR: 0.001,
     UnitOfEnergy.KILO_WATT_HOUR: 1.0,
@@ -30,15 +26,20 @@ _ENERGY_UNIT_TO_KWH: dict[str, float] = {
 }
 
 
+def is_energy_meter(state: State | None) -> bool:
+    return (
+        state is not None
+        and state.entity_id.startswith("sensor.")
+        and state.attributes.get("unit_of_measurement") in _ENERGY_UNIT_TO_KWH
+        and state.attributes.get("state_class") in _METER_STATE_CLASSES
+    )
+
+
 def _energy_kwh(state: State | None) -> float | None:
-    """Value of an energy sensor in kWh, or None if it isn't a usable
-    numeric energy sensor (wrong domain, no/unknown unit, non-numeric)."""
-    if state is None or not state.entity_id.startswith("sensor."):
+    """kWh value, or None if not a meter or not a finite number."""
+    if state is None or not is_energy_meter(state):
         return None
-    unit = state.attributes.get("unit_of_measurement")
-    mult = _ENERGY_UNIT_TO_KWH.get(unit) if unit else None
-    if mult is None:
-        return None
+    mult = _ENERGY_UNIT_TO_KWH[state.attributes["unit_of_measurement"]]
     try:
         value = float(state.state)
     except (TypeError, ValueError):
@@ -53,18 +54,15 @@ def _round_kwh(v: float) -> float:
 
 
 class EnergyService:
-    """Stateless; safe to instantiate per request. Reads the state machine
-    directly, so all methods are sync and event-loop safe."""
+    """Stateless and sync; safe to instantiate per request."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
 
-    def _own_entity_ids(self) -> set[str]:
-        """Entity IDs that belong to InkView itself. These are never summed:
-        sensor.inkview_total_energy reports its result in kWh, so feeding it
-        back into the sum makes the total reference itself and run away
-        exponentially. Matched via the entity registry's platform so it holds
-        across renames and multiple config entries."""
+    def own_entity_ids(self) -> set[str]:
+        """InkView's own entities, never summed: the kWh total would feed back into itself.
+
+        Matched by registry platform so it survives renames and multiple entries."""
         reg = er.async_get(self.hass)
         return {
             entry.entity_id
@@ -73,11 +71,8 @@ class EnergyService:
         }
 
     def _candidate_ids(self, allowed: list[str] | None) -> list[str]:
-        """Which sensors to consider. An allowlist is taken verbatim
-        (de-duped, order preserved); an empty one means 'no sensors'. None
-        means 'all sensors', so we scan every sensor.* entity. InkView's own
-        entities are always dropped so the total can't feed back into itself."""
-        own = self._own_entity_ids()
+        """De-duped allowlist (None = every sensor.*), minus InkView's own entities."""
+        own = self.own_entity_ids()
         if allowed is not None:
             ids = list(dict.fromkeys(allowed))
         else:
@@ -85,8 +80,7 @@ class EnergyService:
         return [eid for eid in ids if eid not in own]
 
     def total(self, allowed: list[str] | None) -> dict[str, Any]:
-        """Sum the chosen energy sensors into a single kWh figure plus the
-        per-sensor breakdown that fed it."""
+        """kWh total plus per-sensor breakdown."""
         contributors: list[dict[str, Any]] = []
         total_kwh = 0.0
 

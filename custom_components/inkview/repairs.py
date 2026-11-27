@@ -1,8 +1,4 @@
-"""Repair issues surfaced in Settings → Repairs.
-
-We use informational `async_create_issue` rather than a fixable RepairsFlow:
-the user fixes this by picking sensors in the integration's options, not in
-a popup. The `learn_more_url` deep-links to the integration page."""
+"""Repair issues. Informational, not fixable: the fix is in the options."""
 from __future__ import annotations
 
 import logging
@@ -16,10 +12,6 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def report_energy_state(hass: HomeAssistant, has_energy_sensors: bool) -> None:
-    """Create or clear the 'no energy sensors' issue.
-
-    Called from the energy coordinator on every successful refresh. Idempotent;
-    HA's issue registry handles the dedupe on create."""
     if has_energy_sensors:
         ir.async_delete_issue(hass, DOMAIN, ISSUE_NO_ENERGY_SENSORS)
         return

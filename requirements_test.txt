@@ -1,9 +1,5 @@
-# Test dependencies. pytest-homeassistant-custom-component pulls in a matching
-# Home Assistant core, pytest, and pytest-asyncio, so the suite runs against a
-# real hass (state machine, entity registry, etc.).
-#
-# Pinned so CI reproduces exactly what the suite was verified against. 0.13.205
-# brings HA 2025.1.x (the last line supporting Python 3.12); bump this together
-# with the CI Python version when raising the tested HA baseline.
+# Pinned to HA 2025.1 (last release on Python 3.12); the frontend version must
+# match the one that HA core pins.
 pytest-homeassistant-custom-component==0.13.205
 pytest-cov
+home-assistant-frontend==20250109.2

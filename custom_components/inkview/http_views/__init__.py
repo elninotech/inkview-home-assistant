@@ -16,10 +16,7 @@ from .states_list import InkViewStatesListView
 
 
 async def register_views(hass: HomeAssistant) -> None:
-    """Register HTTP views + the unauthenticated static logo path.
-
-    Caller gates this on a flag in hass.data so two config entries don't
-    trigger a duplicate-route warning."""
+    """Register views and static paths; caller must invoke this once per HA instance."""
     hass.http.register_view(InkViewAuthTokenView())
     hass.http.register_view(InkViewStatesListView())
     hass.http.register_view(InkViewStateView())
@@ -36,8 +33,7 @@ async def register_views(hass: HomeAssistant) -> None:
         )
     panel_dir = public_root / "panel"
     if panel_dir.is_dir():
-        # Cache for a day — the URL is fingerprinted with `?v=<VERSION>`
-        # in panel.py, so a bumped version forces fresh fetches.
+        # Cacheable: panel.py fingerprints the URL with ?v=<VERSION>.
         static_paths.append(
             StaticPathConfig(f"{URL_PREFIX}/panel", str(panel_dir), True)
         )

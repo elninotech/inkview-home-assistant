@@ -1,12 +1,4 @@
-"""Tests for the sensor grant and effective_allowlist — the per-request
-authorization boundary.
-
-None means "all renderable sensors" and is only ever produced by an explicit
-`all_sensors: true`. A set (possibly empty) is a strict allowlist, where the
-empty set means "deny everything". effective_allowlist returns the more
-restrictive of the token's frozen grant and the session's current one, so
-tightening scope in options applies to already-issued tokens.
-"""
+"""Sensor grant and effective_allowlist: None = all sensors, empty set = deny all."""
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.inkview.const import (
@@ -24,9 +16,6 @@ def _only(*ids: str) -> dict:
     return {"all_sensors": False, "allowed_entities": list(ids)}
 
 
-# --- entry_grant -----------------------------------------------------------
-
-
 def test_entry_all_sensors_is_none():
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -36,7 +25,6 @@ def test_entry_all_sensors_is_none():
 
 
 def test_entry_restricted_with_nothing_picked_is_empty_not_all():
-    # ELN-380: toggle off + no sensors picked must read nothing.
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={CONF_ALL_SENSORS: False, CONF_ALLOWED_ENTITIES: []},
@@ -70,9 +58,6 @@ def test_entry_without_toggle_keeps_legacy_meaning():
     assert entry_grant(legacy_list) == ["sensor.a"]
 
 
-# --- grant_set -------------------------------------------------------------
-
-
 def test_grant_set_normalisation():
     assert grant_set(ALL) is None
     assert grant_set(_only()) == set()
@@ -80,13 +65,10 @@ def test_grant_set_normalisation():
 
 
 def test_grant_set_fails_closed_without_explicit_flag():
-    # Pre-fix bearers carried a bare list; an empty one must not mean "all".
+    # Legacy bearers have no all_sensors flag.
     assert grant_set({"allowed_entities": []}) == set()
     assert grant_set({}) == set()
     assert grant_set({"all_sensors": "true"}) == set()  # only literal True
-
-
-# --- effective_allowlist ---------------------------------------------------
 
 
 def test_both_all_returns_none():
@@ -126,4 +108,4 @@ def test_intersection_is_more_restrictive():
 def test_disjoint_grants_deny_all_not_all():
     out = effective_allowlist(_only("sensor.a"), _only("sensor.b"))
     assert out == set()
-    assert out is not None  # empty set = deny everything, NOT "all sensors"
+    assert out is not None

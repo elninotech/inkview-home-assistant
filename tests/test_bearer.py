@@ -1,9 +1,4 @@
-"""Security tests for the stdlib JWT/HMAC primitives in auth/bearer.py.
-
-These cover the properties the auth layer relies on: signatures are verified,
-the header `alg` cannot be used to bypass verification, reserved claims can't
-be forged through extra_claims, and HMAC request signing binds ts + nonce.
-"""
+"""Security tests for the JWT/HMAC primitives in auth/bearer.py."""
 import base64
 import hashlib
 import hmac
@@ -23,7 +18,7 @@ def _b64(data: bytes) -> str:
 
 
 def _signed(claims: dict, secret: bytes = SECRET) -> str:
-    """Hand-build a correctly HS256-signed token from arbitrary claims."""
+    """Sign arbitrary claims, bypassing mint()'s checks."""
     header = _b64(json.dumps({"alg": "HS256", "typ": "JWT"}, sort_keys=True).encode())
     payload = _b64(json.dumps(claims, sort_keys=True).encode())
     sig = _b64(hmac.new(secret, f"{header}.{payload}".encode(), hashlib.sha256).digest())
@@ -68,7 +63,6 @@ def test_tampered_payload_rejected():
 
 
 def test_alg_none_confusion_rejected():
-    # Attacker switches header to alg=none and drops the signature.
     header = _b64(json.dumps({"alg": "none", "typ": "JWT"}).encode())
     payload = _b64(json.dumps(_valid_claims()).encode())
     with pytest.raises(bearer.InvalidToken):
@@ -105,7 +99,6 @@ def test_bad_audience_rejected():
 
 
 def test_reserved_claims_cannot_be_forged():
-    # extra_claims must not be able to override iss / aud / exp.
     token, exp = bearer.mint(
         SECRET, sub="inst-1", key_version=1,
         extra_claims={"iss": "evil", "aud": "evil", "exp": 1},
@@ -127,7 +120,6 @@ def test_hmac_roundtrip_and_binding():
     body = b"inst-1"
     sig = bearer.sign_hmac(SECRET, body, "1700000000", "nonce-abc")
     assert bearer.verify_hmac(SECRET, body, "1700000000", "nonce-abc", sig)
-    # Any change to ts, nonce, body, or secret must break verification.
     assert not bearer.verify_hmac(SECRET, body, "1700000001", "nonce-abc", sig)
     assert not bearer.verify_hmac(SECRET, body, "1700000000", "nonce-xyz", sig)
     assert not bearer.verify_hmac(SECRET, b"inst-2", "1700000000", "nonce-abc", sig)

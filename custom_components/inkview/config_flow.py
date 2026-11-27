@@ -1,4 +1,4 @@
-"""Config + options + reauth flows for InkView."""
+"""Config, options and reauth flows for InkView."""
 from __future__ import annotations
 
 import logging
@@ -24,11 +24,13 @@ from .const import (
     CONF_ALL_SENSORS,
     CONF_ALLOWED_ENTITIES,
     CONF_INSTANCE_ID,
+    CONF_LINK_EXPIRES_AT,
     CONF_SECRET,
     CONF_SHOW_SIDEBAR_PANEL,
     DOMAIN,
 )
 from .grant import entry_grant
+from .link import new_link_expiry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,18 +46,13 @@ def _parse_secret(raw: str | None) -> bytes:
 
 
 def _resolve_allowed(user_input: dict[str, Any]) -> list[str]:
-    """Map the 'Expose all sensors' toggle + the picker into the stored
-    allowlist. Toggle ON -> empty list (the CONF_ALL_SENSORS flag stored
-    beside it is what grants every sensor). Toggle OFF -> exactly the picked
-    sensors; none picked means InkView can read nothing."""
+    """[] when "all sensors" is on (the flag grants all), else the picks."""
     if user_input.get(CONF_ALL_SENSORS, True):
         return []
     return list(user_input.get(CONF_ALLOWED_ENTITIES) or [])
 
 
 class InkViewConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Manual-setup + reauth flows (phase-1; cloud pairing in phase-2)."""
-
     VERSION = 1
 
     def __init__(self) -> None:
@@ -92,6 +89,7 @@ class InkViewConfigFlow(ConfigFlow, domain=DOMAIN):
                         CONF_NAME: user_input.get(CONF_NAME, "InkView"),
                         CONF_INSTANCE_ID: instance_id,
                         CONF_SECRET: secret_bytes.hex(),
+                        CONF_LINK_EXPIRES_AT: new_link_expiry(),
                         CONF_ALL_SENSORS: bool(
                             user_input.get(CONF_ALL_SENSORS, True)
                         ),
@@ -122,9 +120,6 @@ class InkViewConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_reauth(
         self, entry_data: dict[str, Any]
     ) -> ConfigFlowResult:
-        """Triggered by the integration when the stored secret is no longer
-        accepted (e.g. user rotated it externally). Surfaces the red banner
-        in HA UI without losing the entry / its entity ids."""
         self._reauth_entry = self.hass.config_entries.async_get_entry(
             self.context["entry_id"]
         )
@@ -149,6 +144,7 @@ class InkViewConfigFlow(ConfigFlow, domain=DOMAIN):
                     data={
                         **self._reauth_entry.data,
                         CONF_SECRET: secret_bytes.hex(),
+                        CONF_LINK_EXPIRES_AT: new_link_expiry(),
                     },
                 )
                 await self.hass.config_entries.async_reload(
@@ -167,10 +163,6 @@ class InkViewConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class InkViewOptionsFlow(OptionsFlow):
-    """Edit allowed_entities (and future per-entry settings) without losing
-    the entry. Stored under entry.options so HA's "are there pending changes?"
-    indicator works correctly."""
-
     def __init__(self, config_entry: ConfigEntry) -> None:
         self._entry = config_entry
 
@@ -191,16 +183,13 @@ class InkViewOptionsFlow(OptionsFlow):
                 },
             )
 
-        # Options take precedence over the original data so users see what
-        # was actually applied last.
         current_entities = list(
             self._entry.options.get(
                 CONF_ALLOWED_ENTITIES,
                 self._entry.data.get(CONF_ALLOWED_ENTITIES, []),
             )
         )
-        # Default the toggle to the grant actually in force so re-opening
-        # options is non-destructive.
+        # Default to the grant in force so re-opening options is non-destructive.
         current_all = entry_grant(self._entry) is None
         current_panel = bool(
             self._entry.options.get(

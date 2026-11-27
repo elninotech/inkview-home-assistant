@@ -1,4 +1,4 @@
-"""Bearer-authenticated, read-only sensor state endpoint."""
+"""GET /api/inkview/v1/states/{entity_id} — single sensor state."""
 from __future__ import annotations
 
 import logging
@@ -14,9 +14,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _renderable(state: State | None) -> bool:
-    """Structural check that mirrors InkView's existing is_renderable_sensor
-    on the server side: domain must be sensor.*, must have a unit, and the
-    state must parse as a number."""
+    """Numeric sensor.* with a unit; mirrors the InkView server's is_renderable_sensor."""
     if state is None:
         return False
     if not state.entity_id.startswith("sensor."):
@@ -32,11 +30,9 @@ def _renderable(state: State | None) -> bool:
 
 
 class InkViewStateView(HomeAssistantView):
-    """GET /api/inkview/v1/states/{entity_id}"""
-
     url = f"{URL_PREFIX}/states/{{entity_id}}"
     name = "api:inkview:state"
-    requires_auth = False  # custom bearer below
+    requires_auth = False  # custom bearer
 
     async def get(self, request: web.Request, entity_id: str) -> web.Response:
         result = authenticate_bearer(request)
@@ -44,8 +40,6 @@ class InkViewStateView(HomeAssistantView):
             return result
         claims, session = result
 
-        # None = "all renderable sensors"; a set (possibly empty) = strict
-        # allowlist, where empty means "read nothing".
         allowed = effective_allowlist(claims, session)
         if allowed is not None and entity_id not in allowed:
             return web.json_response({"error": "entity_not_allowed"}, status=403)

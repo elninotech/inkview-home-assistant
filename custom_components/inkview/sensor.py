@@ -1,14 +1,4 @@
-"""SensorEntity layer (in-HA visualization).
-
-A single derived sensor — `sensor.inkview_total_energy` — exposes the kWh
-sum of the energy sensors the user selected (or all energy sensors, if the
-allowlist is empty). The per-sensor breakdown that fed the total rides along
-as the `contributing_sensors` attribute so the sidebar panel can render it
-without extra entities.
-
-State class is TOTAL (not TOTAL_INCREASING): the sum can fall if one of the
-contributing sensors drops or goes unavailable, and TOTAL_INCREASING would
-misread that as a meter reset."""
+"""Total-energy sensor: kWh sum of the energy meters within InkView's grant."""
 from __future__ import annotations
 
 import logging
@@ -56,11 +46,10 @@ async def async_setup_entry(
 class InkViewTotalEnergySensor(
     CoordinatorEntity[InkViewEnergyCoordinator], SensorEntity
 ):
-    """kWh sum of the selected energy sensors."""
-
     _attr_has_entity_name = True
     _attr_name = "Total Energy"
     _attr_device_class = SensorDeviceClass.ENERGY
+    # Not TOTAL_INCREASING: the sum can drop when a source goes unavailable.
     _attr_state_class = SensorStateClass.TOTAL
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
 

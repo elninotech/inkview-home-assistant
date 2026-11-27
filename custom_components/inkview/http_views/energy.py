@@ -1,10 +1,4 @@
-"""Bearer-authenticated total-energy endpoint.
-
-GET /api/inkview/v1/energy/totals
-
-Returns the kWh sum of the energy sensors this token is allowed to see,
-plus the per-sensor breakdown.
-Read-only — never mutates HA."""
+"""GET /api/inkview/v1/energy/totals — kWh sum of granted energy meters plus breakdown."""
 from __future__ import annotations
 
 import logging
@@ -30,15 +24,13 @@ class InkViewEnergyTotalsView(HomeAssistantView):
             return result
         claims, session = result
 
-        # None == all renderable sensors; a set (possibly empty) == strict
-        # allowlist, where empty sums nothing.
         allowed = effective_allowlist(claims, session)
         hass = request.app["hass"]
         try:
             payload = EnergyService(hass).total(
                 None if allowed is None else sorted(allowed)
             )
-        except Exception:  # noqa: BLE001 — never leak internals to the caller
+        except Exception:  # noqa: BLE001 — don't leak internals
             _LOGGER.exception("energy total failed")
             return web.json_response({"error": "energy_unavailable"}, status=503)
 

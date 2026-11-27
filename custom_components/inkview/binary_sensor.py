@@ -1,9 +1,5 @@
-"""Connection health binary_sensor for the InkView session.
-
-`binary_sensor.inkview_connected` is `on` whenever InkView has successfully
-exercised the auth or read surface in the last CONNECTED_THRESHOLD_SECONDS.
-Attributes expose the underlying counters so users can build automations
-like "alert me if InkView hasn't synced for 30 min." """
+"""Connection health: on if InkView minted a token or fetched state within
+CONNECTED_THRESHOLD_SECONDS."""
 from __future__ import annotations
 
 import time
@@ -23,6 +19,7 @@ from datetime import timedelta
 
 from .const import (
     CONF_INSTANCE_ID,
+    CONF_LINK_EXPIRES_AT,
     CONNECTED_THRESHOLD_SECONDS,
     DATA_SESSIONS,
     DOMAIN,
@@ -56,8 +53,6 @@ async def async_setup_entry(
 
 
 class InkViewConnectedSensor(BinarySensorEntity):
-    """Polled every 30 s; reads the session's SessionStats snapshot."""
-
     _attr_has_entity_name = True
     _attr_name = "Connected"
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
@@ -70,10 +65,9 @@ class InkViewConnectedSensor(BinarySensorEntity):
         self._attr_unique_id = f"{entry.entry_id}_connected"
         self._attr_device_info = _device_info(entry)
         self._snapshot: dict = {}
+        self._link_expires_at: float | None = None
 
     async def async_added_to_hass(self) -> None:
-        # Refresh once a minute. We don't need finer granularity than that
-        # for a "has InkView talked to us recently?" indicator.
         self.async_on_remove(
             async_track_time_interval(
                 self._hass, self._async_tick, timedelta(seconds=30)
@@ -93,14 +87,13 @@ class InkViewConnectedSensor(BinarySensorEntity):
             self._snapshot = {}
             return
         self._snapshot = session["stats"].snapshot()
+        self._link_expires_at = session.get(CONF_LINK_EXPIRES_AT)
 
     @property
     def is_on(self) -> bool:
         snap = self._snapshot
         if not snap:
             return False
-        # "Connected" if either the token mint or the data fetch happened
-        # within the threshold. Either signal counts as InkView being alive.
         candidates = [
             snap.get("last_token_minted_at"),
             snap.get("last_state_fetch_at"),
@@ -121,4 +114,5 @@ class InkViewConnectedSensor(BinarySensorEntity):
             "last_failed_auth_at": _iso(snap.get("last_failed_auth_at")),
             "tokens_issued_24h": snap.get("tokens_issued_24h", 0),
             "failed_auth_24h": snap.get("failed_auth_24h", 0),
+            "link_expires_at": _iso(self._link_expires_at),
         }

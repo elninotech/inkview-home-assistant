@@ -1,9 +1,4 @@
-"""Sidebar panel registration.
-
-Registers the InkView panel as a custom HA frontend panel using the
-`custom` component_name + `_panel_custom` config — the same hook HACS uses.
-The JS module is served as a static asset from `public/panel/`.
-"""
+"""Sidebar panel registration (custom panel, JS from `public/panel/`)."""
 from __future__ import annotations
 
 import logging
@@ -29,7 +24,7 @@ def _registered(hass: HomeAssistant) -> bool:
 
 
 def async_register_panel(hass: HomeAssistant) -> None:
-    """Idempotent — safe to call once per enabled config entry."""
+    """Idempotent; called once per enabled config entry."""
     if _registered(hass):
         return
     try:
@@ -50,15 +45,12 @@ def async_register_panel(hass: HomeAssistant) -> None:
             },
         )
     except ValueError:
-        # async_register_built_in_panel raises ValueError if the url_path is
-        # already taken (e.g. HA restored a previous panel registration).
-        # Treat as already-registered.
+        # Raised when the url_path is already taken; treat as registered.
         _LOGGER.debug("InkView panel was already registered; reusing it")
     hass.data.setdefault(DOMAIN, {})[DATA_PANEL_REGISTERED] = True
 
 
 def async_unregister_panel(hass: HomeAssistant) -> None:
-    """Safe to call even if the panel was never registered."""
     if not _registered(hass):
         return
     try:

@@ -1,25 +1,12 @@
 #!/usr/bin/env python3
-"""Sign an auth/token request against a running InkView HA integration.
+"""Request a bearer token from a running InkView HA integration.
 
 Usage:
-  python tools/sign_request.py \\
-      --base-url https://your-ha-host:8123 \\
-      --instance-id <hex from config entry> \\
-      --secret <64 hex chars>
+  TOKEN=$(python tools/sign_request.py --base-url https://ha:8123 \\
+      --instance-id <hex> --secret <64 hex chars> | tail -1)
+  curl -H "Authorization: Bearer $TOKEN" https://ha:8123/api/inkview/v1/states/sensor.solar
 
-Prints the bearer JWT (and expiry) on success. Pipe it into curl:
-
-  TOKEN=$(python tools/sign_request.py ... | tail -1)
-  curl -H "Authorization: Bearer $TOKEN" \\
-       https://your-ha-host:8123/api/inkview/v1/states/sensor.solar
-
-TLS notes:
-  Self-signed dev certs must be trusted properly — add the cert/CA to your
-  system trust store (e.g. `security add-trusted-cert` on macOS, the
-  `ca-certificates` package on Linux) or point Python at it via the
-  SSL_CERT_FILE env var. We intentionally do NOT expose an --insecure flag:
-  disabling verification turns the bearer flow into a free MITM oracle for
-  anyone on the network path.
+Self-signed certs: trust them or set SSL_CERT_FILE. No --insecure flag by design (MITM risk).
 """
 from __future__ import annotations
 
